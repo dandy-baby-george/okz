@@ -9,6 +9,7 @@ COMMAND_CONFIG = {
     "get": ("RECOMMENDED", "featured"),
     "hot": ("HOT", "hot"),
     "top": ("TOP-RATED", "toprated"),
+    "views": ("MOST-VIEWED", "mostviewed"),
     "latest": ("LATEST", "newest"),
     "random": ("RANDOM", "random"),
 }
@@ -23,7 +24,6 @@ class MyBot(commands.Bot):
 
     async def setup_hook(self):
         self.session = aiohttp.ClientSession()
-
         await self.register_commands()
         await self.tree.sync()
         print("Slash commands synced.")
@@ -96,3 +96,4 @@ async def on_ready():
 TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 if TOKEN:
     bot.run(TOKEN)
+    

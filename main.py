@@ -1,28 +1,22 @@
 import os
 import random
 import discord
+from discord import app_commands
 from discord.ext import commands
 import requests
 
-# インテントの設定
-intents = discord.Intents.default()
-intents.message_content = True
-
-bot = commands.Bot(command_prefix="!", intents=intents)
-
 ORDER_MAP = {
-    "おすすめ": "featured",
-    "最もホット": "hot",
-    "最多閲覧": "mostviewed",
-    "最高評価": "toprated",
-    "最新": "newest",
-    "ランダム": "random",
+    "featured": "featured",
+    "hot": "hot",
+    "most-viewed": "mostviewed",
+    "top-rated": "toprated",
+    "newest": "newest",
+    "random": "random",
 }
 
-
-def fetch_pornhub_video(order_key="おすすめ"):
+def fetch_pornhub_video(category="recommended"):
     api_url = "https://www.pornhub.com/webmasters/search"
-    ordering = ORDER_MAP.get(order_key, "featured")
+    ordering = ORDER_MAP.get(category, "featured")
     params = {"thumbsize": "large"}
 
     if ordering != "random":
@@ -40,33 +34,43 @@ def fetch_pornhub_video(order_key="おすすめ"):
         print(f"API Error: {e}")
         return None
 
+class MyBot(commands.Bot):
+
+    def __init__(self):
+        intents = discord.Intents.default()
+        super().__init__(command_prefix="!", intents=intents)
+
+    async def setup_hook(self):
+        await self.tree.sync()
+        print("Slash commands synced.")
+
+bot = MyBot()
 
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user.name}")
 
-
-@bot.command(name="av")
-async def get_av(ctx, category: str = "おすすめ"):
-    """使用例: !av 最もホット / !av 最高評価 / !av ランダム"""
-    if category not in ORDER_MAP:
-        categories_str = " / ".join(ORDER_MAP.keys())
-        await ctx.send(f"カテゴリを指定してください: `{categories_str}`")
-        return
+@bot.tree.command(name="get", description="Get a video")
+@app_commands.describe(category="Select category")
+@app_commands.choices(
+    category=[
+        app_commands.Choice(name=k, value=k) for k in ORDER_MAP.keys()
+    ]
+)
+async def get_av(interaction: discord.Interaction, category: str = "recommended"):
+    await interaction.response.defer()
 
     video = fetch_pornhub_video(category)
 
     if not video:
-        await ctx.send("動画が見つかりませんでした。")
+        await interaction.followup.send("No videos found.")
         return
 
     title = video.get("title")
     url = video.get("url")
 
-    await ctx.send(f"**【{category}】** {title}\n{url}")
+    await interaction.followup.send(f"**[{category.upper()}]** {title}\n{url}")
 
-
-# 環境変数からトークンを取得して起動
 TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 if TOKEN:
     bot.run(TOKEN)

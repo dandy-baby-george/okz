@@ -5,14 +5,13 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-COMMAND_CONFIG = {
-    "get": ("RECOMMENDED", "featured"),
-    "hot": ("HOT", "hot"),
-    "top": ("TOP-RATED", "toprated"),
-    "views": ("MOST-VIEWED", "mostviewed"),
-    "latest": ("LATEST", "newest"),
-    "random": ("RANDOM", "random"),
-}
+API_URL = "https://www.pornhub.com/webmasters/search"
+COMMAND_NAME = "random"
+COMMAND_DESCRIPTION = "Find and share a random video"
+MIN_PAGE = 1
+MAX_PAGE = 99
+THUMB_SIZE = "large"
+HTTP_TIMEOUT_SECONDS = 10
 
 
 class MyBot(commands.Bot):
@@ -24,7 +23,20 @@ class MyBot(commands.Bot):
 
     async def setup_hook(self):
         self.session = aiohttp.ClientSession()
-        await self.register_commands()
+
+        @self.tree.command(name=COMMAND_NAME, description=COMMAND_DESCRIPTION)
+        async def random_command(interaction: discord.Interaction):
+            await interaction.response.defer()
+            video = await self.fetch_pornhub_video()
+
+            if not video:
+                await interaction.followup.send("No videos found.")
+                return
+
+            title = video.get("title", "No Title")
+            url = video.get("url", "")
+            await interaction.followup.send(f"**[RANDOM]** {title}\n{url}")
+
         await self.tree.sync()
         print("Slash commands synced.")
 
@@ -33,16 +45,15 @@ class MyBot(commands.Bot):
             await self.session.close()
         await super().close()
 
-    async def fetch_pornhub_video(self, ordering: str) -> dict | None:
-        api_url = "https://www.pornhub.com/webmasters/search"
-        params = {"thumbsize": "large"}
-
-        if ordering != "random":
-            params["ordering"] = ordering
+    async def fetch_pornhub_video(self) -> dict | None:
+        params = {
+            "thumbsize": THUMB_SIZE,
+            "page": random.randint(MIN_PAGE, MAX_PAGE),
+        }
 
         try:
             async with self.session.get(
-                api_url, params=params, timeout=10
+                API_URL, params=params, timeout=HTTP_TIMEOUT_SECONDS
             ) as response:
                 if response.status != 200:
                     return None
@@ -52,37 +63,6 @@ class MyBot(commands.Bot):
         except Exception as e:
             print(f"API Error: {e}")
             return None
-
-    async def handle_command(
-        self, interaction: discord.Interaction, label: str, ordering: str
-    ):
-        await interaction.response.defer()
-        video = await self.fetch_pornhub_video(ordering)
-
-        if not video:
-            await interaction.followup.send("No videos found.")
-            return
-
-        title = video.get("title", "No Title")
-        url = video.get("url", "")
-        await interaction.followup.send(f"**[{label}]** {title}\n{url}")
-
-    async def register_commands(self):
-        for cmd_name, (label, ordering) in COMMAND_CONFIG.items():
-
-            async def command_callback(
-                interaction: discord.Interaction,
-                lbl=label,
-                ord_val=ordering,
-            ):
-                await self.handle_command(interaction, lbl, ord_val)
-
-            cmd = app_commands.Command(
-                name=cmd_name,
-                description=f"Get {cmd_name} video",
-                callback=command_callback,
-            )
-            self.tree.add_command(cmd)
 
 
 bot = MyBot()
@@ -96,4 +76,3 @@ async def on_ready():
 TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 if TOKEN:
     bot.run(TOKEN)
-    

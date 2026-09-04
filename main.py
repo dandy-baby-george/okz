@@ -48,7 +48,25 @@ async def fetch_pornhub_video() -> dict | None:
             if response.status_code != 200:
                 logger.warning("Video API returned HTTP %s", response.status_code)
                 return None
-            data = response.json()
+            content_type = response.headers.get("content-type", "")
+            response_text = response.text.strip()
+            if not response_text:
+                logger.warning("Video API returned an empty response")
+                return None
+            if "json" not in content_type.lower():
+                logger.warning(
+                    "Video API returned non-JSON content: content_type=%s body=%s",
+                    content_type or "missing",
+                    response_text[:200],
+                )
+                return None
+            try:
+                data = response.json()
+            except (json.JSONDecodeError, ValueError):
+                logger.warning(
+                    "Video API returned invalid JSON: body=%s", response_text[:200]
+                )
+                return None
             videos = data.get("videos", [])
             return random.choice(videos) if videos else None
     except Exception as error:

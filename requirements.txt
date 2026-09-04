@@ -2,3 +2,4 @@ fastapi
 httpx
 PyNaCl
 uvicorn
+curl-cffi

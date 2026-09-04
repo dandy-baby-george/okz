@@ -1,8 +1,11 @@
 import json
+import logging
 import os
 import random
+from logging.handlers import RotatingFileHandler
 
 import httpx
+from curl_cffi.requests import AsyncSession
 from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.responses import JSONResponse
 from nacl.exceptions import BadSignatureError
@@ -19,27 +22,37 @@ DISCORD_API_URL = "https://discord.com/api/v10"
 
 app = FastAPI()
 
+logger = logging.getLogger("random_bot")
+logger.setLevel(logging.INFO)
+logger.addHandler(logging.StreamHandler())
+if not os.environ.get("VERCEL"):
+    file_handler = RotatingFileHandler(
+        "app.log", maxBytes=1_000_000, backupCount=3, encoding="utf-8"
+    )
+    logger.addHandler(file_handler)
+
 
 async def fetch_pornhub_video() -> dict | None:
     params = {"page": random.randint(MIN_PAGE, MAX_PAGE)}
     headers = {
-        "Accept": "application/json",
-        "User-Agent": "Mozilla/5.0 (compatible; RandomDiscordBot/1.0)",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
     }
 
     try:
-        async with httpx.AsyncClient(
-            timeout=HTTP_TIMEOUT_SECONDS, follow_redirects=True
+        async with AsyncSession(
+            impersonate="chrome", timeout=HTTP_TIMEOUT_SECONDS
         ) as client:
             response = await client.get(API_URL, params=params, headers=headers)
             if response.status_code != 200:
-                print(f"Video API returned HTTP {response.status_code}")
+                logger.warning("Video API returned HTTP %s", response.status_code)
                 return None
             data = response.json()
             videos = data.get("videos", [])
             return random.choice(videos) if videos else None
     except Exception as error:
-        print(f"API Error: {error}")
+        logger.exception("API error: %s", error)
         return None
 
 async def send_random_result(application_id: str, interaction_token: str) -> None:
@@ -64,12 +77,13 @@ async def send_random_result(application_id: str, interaction_token: str) -> Non
                 )
                 response = await client.post(followup_url, json={"content": content})
         if response.is_error:
-            print(
-                "Discord webhook error: "
-                f"status={response.status_code} body={response.text}"
+            logger.error(
+                "Discord webhook error: status=%s body=%s",
+                response.status_code,
+                response.text,
             )
     except Exception as error:
-        print(f"Interaction response error: {error}")
+        logger.exception("Interaction response error: %s", error)
 
 
 def verify_discord_request(request: Request, body: bytes) -> bool:

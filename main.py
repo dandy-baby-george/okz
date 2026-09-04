@@ -39,20 +39,33 @@ async def fetch_pornhub_video() -> dict | None:
             return None
 
 async def send_random_result(application_id: str, interaction_token: str) -> None:
-    video = await fetch_pornhub_video()
-    if not video:
-        content = "No videos found."
-    else:
-        title = video.get("title", "No Title")
-        url = video.get("url", "")
-        content = f"**[RANDOM]** {title}\n{url}"
+    try:
+        video = await fetch_pornhub_video()
+        if not video:
+            content = "No videos found."
+        else:
+            title = video.get("title", "No Title")
+            url = video.get("url", "")
+            content = f"**[RANDOM]** {title}\n{url}"
 
-    webhook_url = (
-        f"{DISCORD_API_URL}/webhooks/{application_id}/{interaction_token}"
-        "/messages/@original"
-    )
-    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
-        await client.patch(webhook_url, json={"content": content})
+        webhook_url = (
+            f"{DISCORD_API_URL}/webhooks/{application_id}/{interaction_token}"
+            "/messages/@original"
+        )
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
+            response = await client.patch(webhook_url, json={"content": content})
+            if response.status_code == 404:
+                followup_url = (
+                    f"{DISCORD_API_URL}/webhooks/{application_id}/{interaction_token}"
+                )
+                response = await client.post(followup_url, json={"content": content})
+        if response.is_error:
+            print(
+                "Discord webhook error: "
+                f"status={response.status_code} body={response.text}"
+            )
+    except Exception as error:
+        print(f"Interaction response error: {error}")
 
 
 def verify_discord_request(request: Request, body: bytes) -> bool:

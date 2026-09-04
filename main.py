@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import random
+import xml.etree.ElementTree as ET
 from logging.handlers import RotatingFileHandler
 
 import httpx
@@ -11,12 +12,9 @@ from fastapi.responses import JSONResponse
 from nacl.exceptions import BadSignatureError
 from nacl.signing import VerifyKey
 
-API_URL = "https://www.pornhub.com/webmasters/search"
+API_URL = "https://jp.pornhub.com/video/webmasterss"
 COMMAND_NAME = "random"
 COMMAND_DESCRIPTION = "Find and share a random video"
-MIN_PAGE = 1
-MAX_PAGE = 99
-THUMB_SIZE = "large"
 HTTP_TIMEOUT_SECONDS = 10
 DISCORD_API_URL = "https://discord.com/api/v10"
 
@@ -33,10 +31,9 @@ if not os.environ.get("VERCEL"):
 
 
 async def fetch_pornhub_video() -> dict | None:
-    params = {"page": random.randint(MIN_PAGE, MAX_PAGE)}
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
+        "Accept": "application/rss+xml, application/xml, text/xml",
         "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
     }
 
@@ -44,36 +41,34 @@ async def fetch_pornhub_video() -> dict | None:
         async with AsyncSession(
             impersonate="chrome", timeout=HTTP_TIMEOUT_SECONDS
         ) as client:
-            response = await client.get(API_URL, params=params, headers=headers)
+            response = await client.get(API_URL, headers=headers)
             if response.status_code != 200:
                 logger.warning("Video API returned HTTP %s", response.status_code)
                 return None
             content_type = response.headers.get("content-type", "")
             response_text = response.text.strip()
             logger.info(
-                "Video API response: status=%s content_type=%s body=%s",
+                "Video RSS response: status=%s content_type=%s body=%s",
                 response.status_code,
                 content_type or "missing",
                 response_text[:500] or "<empty>",
             )
             if not response_text:
-                logger.warning("Video API returned an empty response")
-                return None
-            if "json" not in content_type.lower():
-                logger.warning(
-                    "Video API returned non-JSON content: content_type=%s body=%s",
-                    content_type or "missing",
-                    response_text[:200],
-                )
+                logger.warning("Video RSS returned an empty response")
                 return None
             try:
-                data = response.json()
-            except (json.JSONDecodeError, ValueError):
+                root = ET.fromstring(response.content)
+            except ET.ParseError:
                 logger.warning(
-                    "Video API returned invalid JSON: body=%s", response_text[:200]
+                    "Video RSS returned invalid XML: body=%s", response_text[:200]
                 )
                 return None
-            videos = data.get("videos", [])
+            videos = []
+            for item in root.findall(".//item"):
+                title = item.findtext("title", default="").strip()
+                url = item.findtext("link", default="").strip()
+                if title and url:
+                    videos.append({"title": title, "url": url})
             return random.choice(videos) if videos else None
     except Exception as error:
         logger.exception("API error: %s", error)

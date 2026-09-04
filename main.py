@@ -48,9 +48,12 @@ async def fetch_pornhub_video() -> dict | None:
             content_type = response.headers.get("content-type", "")
             response_text = response.text.strip()
             logger.info(
-                "Video RSS response: status=%s content_type=%s body=%s",
+                "Video RSS response: region=%s status=%s content_type=%s url=%s redirects=%s body=%s",
+                os.environ.get("VERCEL_REGION", "local"),
                 response.status_code,
                 content_type or "missing",
+                str(response.url),
+                len(getattr(response, "history", [])),
                 response_text[:2000] or "<empty>",
             )
             if not response_text:

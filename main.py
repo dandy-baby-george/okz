@@ -51,7 +51,7 @@ async def fetch_pornhub_video() -> dict | None:
                 "Video RSS response: status=%s content_type=%s body=%s",
                 response.status_code,
                 content_type or "missing",
-                response_text[:500] or "<empty>",
+                response_text[:2000] or "<empty>",
             )
             if not response_text:
                 logger.warning("Video RSS returned an empty response")
@@ -63,12 +63,21 @@ async def fetch_pornhub_video() -> dict | None:
                     "Video RSS returned invalid XML: body=%s", response_text[:200]
                 )
                 return None
+            items = root.findall(".//item")
             videos = []
-            for item in root.findall(".//item"):
+            for item in items:
                 title = item.findtext("title", default="").strip()
                 url = item.findtext("link", default="").strip()
                 if title and url:
                     videos.append({"title": title, "url": url})
+            logger.info(
+                "Video RSS parsed: root=%s items=%s valid_videos=%s",
+                root.tag,
+                len(items),
+                len(videos),
+            )
+            if not videos:
+                logger.warning("Video RSS contained no valid videos")
             return random.choice(videos) if videos else None
     except Exception as error:
         logger.exception("RSS error: %s", error)

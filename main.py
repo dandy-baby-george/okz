@@ -43,7 +43,7 @@ async def fetch_pornhub_video() -> dict | None:
         ) as client:
             response = await client.get(API_URL, headers=headers)
             if response.status_code != 200:
-                logger.warning("Video API returned HTTP %s", response.status_code)
+                logger.warning("Video RSS returned HTTP %s", response.status_code)
                 return None
             content_type = response.headers.get("content-type", "")
             response_text = response.text.strip()
@@ -71,8 +71,9 @@ async def fetch_pornhub_video() -> dict | None:
                     videos.append({"title": title, "url": url})
             return random.choice(videos) if videos else None
     except Exception as error:
-        logger.exception("API error: %s", error)
+        logger.exception("RSS error: %s", error)
         return None
+
 
 async def send_random_result(application_id: str, interaction_token: str) -> None:
     try:

@@ -21,22 +21,24 @@ app = FastAPI()
 
 
 async def fetch_pornhub_video() -> dict | None:
-        params = {
-            "thumbsize": THUMB_SIZE,
-            "page": random.randint(MIN_PAGE, MAX_PAGE),
-        }
+    params = {"page": random.randint(MIN_PAGE, MAX_PAGE)}
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (compatible; RandomDiscordBot/1.0)",
+    }
 
-        try:
-            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
-                response = await client.get(API_URL, params=params)
-                if response.status_code != 200:
-                    return None
-                data = response.json()
-                videos = data.get("videos", [])
-                return random.choice(videos) if videos else None
-        except Exception as e:
-            print(f"API Error: {e}")
-            return None
+    try:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
+            response = await client.get(API_URL, params=params, headers=headers)
+            if response.status_code != 200:
+                print(f"Video API returned HTTP {response.status_code}")
+                return None
+            data = response.json()
+            videos = data.get("videos", [])
+            return random.choice(videos) if videos else None
+    except Exception as error:
+        print(f"API Error: {error}")
+        return None
 
 async def send_random_result(application_id: str, interaction_token: str) -> None:
     try:

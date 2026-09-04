@@ -50,6 +50,12 @@ async def fetch_pornhub_video() -> dict | None:
                 return None
             content_type = response.headers.get("content-type", "")
             response_text = response.text.strip()
+            logger.info(
+                "Video API response: status=%s content_type=%s body=%s",
+                response.status_code,
+                content_type or "missing",
+                response_text[:500] or "<empty>",
+            )
             if not response_text:
                 logger.warning("Video API returned an empty response")
                 return None

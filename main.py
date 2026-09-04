@@ -28,7 +28,9 @@ async def fetch_pornhub_video() -> dict | None:
     }
 
     try:
-        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(
+            timeout=HTTP_TIMEOUT_SECONDS, follow_redirects=True
+        ) as client:
             response = await client.get(API_URL, params=params, headers=headers)
             if response.status_code != 200:
                 print(f"Video API returned HTTP {response.status_code}")

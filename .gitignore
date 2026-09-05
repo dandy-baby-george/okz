@@ -1,4 +1,5 @@
 .readme.md
+.register-commands.txt
 app.log
 app.log.*
 __pycache__/

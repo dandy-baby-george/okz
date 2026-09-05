@@ -1,7 +1,7 @@
 import os
 import random
 import requests
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 from nacl.signing import VerifyKey
 from nacl.exceptions import BadSignatureError
@@ -44,7 +44,7 @@ def fetch_eporner_video(query: str, order: str, is_random: bool = False) -> dict
         "format": "json"
     }
     try:
-        res = requests.get(BASE_EPORNER_URL, params=params, timeout=10)
+        res = requests.get(BASE_EPORNER_URL, params=params, timeout=8)
         res.raise_for_status()
         data = res.json()
         videos = data.get("videos", [])
@@ -55,37 +55,49 @@ def fetch_eporner_video(query: str, order: str, is_random: bool = False) -> dict
     except Exception:
         return None
 
-def build_embed_response(video: dict | None) -> dict:
-    if not video:
-        return {
-            "type": 4,
-            "data": {
-                "content": "該当する動画が見つかりませんでした。"
-            }
-        }
+def process_command_and_followup(token: str, app_id: str, command_name: str, query: str, site: str):
+    followup_url = f"https://discord.com/api/v10/webhooks/{app_id}/{token}/messages/@original"
     
-    embed = {
-        "title": video.get("title"),
-        "url": video.get("url"),
-        "color": 5814783,
-        "image": {"url": video.get("thumb")} if video.get("thumb") else None,
-        "fields": [
-            {"name": "⏱ 再生時間", "value": f"{video.get('duration')} 分", "inline": True},
-            {"name": "👀 閲覧数", "value": f"{video.get('views', 0):,}", "inline": True},
-            {"name": "★ 評価", "value": f"{video.get('rate')}", "inline": True}
-        ],
-        "footer": {"text": f"Source: {video.get('source')}"}
-    }
+    video = None
+    if site == "eporner":
+        if command_name == "latest":
+            video = fetch_eporner_video(query, "latest")
+        elif command_name == "top-rated":
+            video = fetch_eporner_video(query, "top-rated")
+        elif command_name == "most-popular":
+            video = fetch_eporner_video(query, "most-popular")
+        elif command_name == "top-weekly":
+            video = fetch_eporner_video(query, "top-weekly")
+        elif command_name == "top-monthly":
+            video = fetch_eporner_video(query, "top-monthly")
+        elif command_name == "random":
+            video = fetch_eporner_video(query, "latest", is_random=True)
 
-    return {
-        "type": 4,
-        "data": {
-            "embeds": [embed]
+    if not video:
+        payload = {"content": "該当する動画が見つかりませんでした。"}
+    else:
+        embed = {
+            "title": video.get("title"),
+            "url": video.get("url"),
+            "color": 5814783,
+            "image": {"url": video.get("thumb")} if video.get("thumb") else None,
+            "fields": [
+                {"name": "⏱ 再生時間", "value": f"{video.get('duration')} 分", "inline": True},
+                {"name": "👀 閲覧数", "value": f"{video.get('views', 0):,}", "inline": True},
+                {"name": "★ 評価", "value": f"{video.get('rate')}", "inline": True}
+            ],
+            "footer": {"text": f"Source: {video.get('source')}"}
         }
-    }
+        payload = {"embeds": [embed]}
 
+    try:
+        requests.patch(followup_url, json=payload, timeout=10)
+    except Exception as e:
+        print(f"Failed to send followup: {e}")
+
+@app.post("/")
 @app.post("/api/interactions")
-async def handle_interactions(request: Request):
+async def handle_interactions(request: Request, background_tasks: BackgroundTasks):
     signature = request.headers.get("X-Signature-Ed25519")
     timestamp = request.headers.get("X-Signature-Timestamp")
     body = await request.body()
@@ -100,9 +112,11 @@ async def handle_interactions(request: Request):
         return JSONResponse(content={"type": 1})
 
     if data.get("type") == 2:
+        token = data.get("token")
+        app_id = data.get("application_id")
         command_name = data.get("data", {}).get("name")
         options = data.get("data", {}).get("options", [])
-        
+
         query = "all"
         site = "eporner"
         for opt in options:
@@ -111,24 +125,11 @@ async def handle_interactions(request: Request):
             elif opt.get("name") == "site":
                 site = opt.get("value")
 
-        if site == "eporner":
-            if command_name == "latest":
-                video = fetch_eporner_video(query, "latest")
-            elif command_name == "top-rated":
-                video = fetch_eporner_video(query, "top-rated")
-            elif command_name == "most-popular":
-                video = fetch_eporner_video(query, "most-popular")
-            elif command_name == "top-weekly":
-                video = fetch_eporner_video(query, "top-weekly")
-            elif command_name == "top-monthly":
-                video = fetch_eporner_video(query, "top-monthly")
-            elif command_name == "random":
-                video = fetch_eporner_video(query, "latest", is_random=True)
-            else:
-                return JSONResponse(content={"type": 4, "data": {"content": "未対応のコマンドです。"}})
-        else:
-            return JSONResponse(content={"type": 4, "data": {"content": f"未対応のサイトです: {site}"}})
+        background_tasks.add_task(
+            process_command_and_followup,
+            token, app_id, command_name, query, site
+        )
 
-        return JSONResponse(content=build_embed_response(video))
+        return JSONResponse(content={"type": 5})
 
     return JSONResponse(content={"type": 4, "data": {"content": "Unknown interaction"}})

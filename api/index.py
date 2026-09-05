@@ -8,12 +8,10 @@ from nacl.exceptions import BadSignatureError
 
 app = FastAPI()
 
-# Discord Developer Portalから取得するPUBLIC KEY
 DISCORD_PUBLIC_KEY = os.getenv("DISCORD_PUBLIC_KEY", "")
 BASE_EPORNER_URL = "https://www.eporner.com/api/v2/video/search/"
 
 def verify_discord_request(request_body: bytes, signature: str, timestamp: str):
-    """Discordからのリクエストの署名を検証"""
     if not DISCORD_PUBLIC_KEY:
         raise HTTPException(status_code=500, detail="DISCORD_PUBLIC_KEY is not configured")
     try:
@@ -69,7 +67,7 @@ def build_embed_response(video: dict | None) -> dict:
     embed = {
         "title": video.get("title"),
         "url": video.get("url"),
-        "color": 5814783,  # ダークパープル
+        "color": 5814783,
         "image": {"url": video.get("thumb")} if video.get("thumb") else None,
         "fields": [
             {"name": "⏱ 再生時間", "value": f"{video.get('duration')} 分", "inline": True},
@@ -80,7 +78,7 @@ def build_embed_response(video: dict | None) -> dict:
     }
 
     return {
-        "type": 4,  # CHANNEL_MESSAGE_WITH_SOURCE
+        "type": 4,
         "data": {
             "embeds": [embed]
         }
@@ -98,16 +96,13 @@ async def handle_interactions(request: Request):
     verify_discord_request(body, signature, timestamp)
     data = await request.json()
 
-    # PINGに対する手動レスポンス（Discordの接続確認用）
     if data.get("type") == 1:
         return JSONResponse(content={"type": 1})
 
-    # Slash Command受信時の処理
     if data.get("type") == 2:
         command_name = data.get("data", {}).get("name")
         options = data.get("data", {}).get("options", [])
         
-        # パラメータ取得
         query = "all"
         site = "eporner"
         for opt in options:
@@ -116,24 +111,22 @@ async def handle_interactions(request: Request):
             elif opt.get("name") == "site":
                 site = opt.get("value")
 
-        # コマンドごとの判定
         if site == "eporner":
-            if command_name == "find-latest":
+            if command_name == "latest":
                 video = fetch_eporner_video(query, "latest")
-            elif command_name == "find-top-rated":
+            elif command_name == "top-rated":
                 video = fetch_eporner_video(query, "top-rated")
-            elif command_name == "find-most-popular":
+            elif command_name == "most-popular":
                 video = fetch_eporner_video(query, "most-popular")
-            elif command_name == "find-top-weekly":
+            elif command_name == "top-weekly":
                 video = fetch_eporner_video(query, "top-weekly")
-            elif command_name == "find-top-monthly":
+            elif command_name == "top-monthly":
                 video = fetch_eporner_video(query, "top-monthly")
-            elif command_name == "find-random":
+            elif command_name == "random":
                 video = fetch_eporner_video(query, "latest", is_random=True)
             else:
                 return JSONResponse(content={"type": 4, "data": {"content": "未対応のコマンドです。"}})
         else:
-            # 他サイト拡張用エリア
             return JSONResponse(content={"type": 4, "data": {"content": f"未対応のサイトです: {site}"}})
 
         return JSONResponse(content=build_embed_response(video))
